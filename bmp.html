@@ -1,0 +1,320 @@
+<style>
+body {background-color: gray};
+</style>
+
+<input id="fileinp" type="file"> </input>
+<br>
+<select style="width:17rem" id="colorreadpresets" type="dropdown"></select>
+<select style="margin-left: 19.4rem; width:17rem" id="pixelreadpresets" type="dropdown"></select>
+<br>
+<textarea spellcheck="false" cols=80 rows=20 id="colorread">colortable = [] // reset the colortable
+	customcolorfunc = function(r,g,b) {return "rgb("+r+","+g+","+b+")"};
+	for(let i = 0; i < colors*4; i+=4) {
+		colortable.push(new Color(rawcolors[i+2],rawcolors[i+1],rawcolors[i]))
+	}
+	redrawBMP()
+</textarea>
+<textarea spellcheck="false" cols=100 rows=20 id="pixelread">c2D.clearRect(0,0,width,height); // clear area
+	for(let y = height; y !== 0; y--) {
+		for(let x = 0; x < width; x++) {
+			c2D.fillStyle = colortable[pixels[x+(width*(height-y))]].colorConversion();
+			c2D.fillRect(x,y,1,1);
+		}
+	}
+</textarea>
+<br>
+<button id="reloadbmpcolored">Reload BMP using this color generating function</button>
+<button style="margin-left: 19rem" id="reloadbmpcustom">Reload BMP using this drawing function</button>
+<br>
+<br>
+<canvas id="mycanv"></canvas>
+<a hidden download id="download"></a>
+
+
+
+<script>
+let chunk = [];
+
+c2D = mycanv.getContext('2d')
+
+function readUint32BE(arr) {
+	return (arr[3] << 24) + (arr[2] << 16) + (arr[1] << 8) + (arr[0])
+};
+
+var customcolorfunc = function(r,g,b) {return `rgb(${r},${g},${b}`}
+
+class Color {
+	constructor(r,g,b) {
+		this.red = r;
+		this.green = g;
+		this.blue = b;
+	}
+	colorHex() {
+		return "#"+(this.red.toString('16')+this.green.toString('16')+this.blue.toString('16'));
+	}
+	colorRGB() {
+		return `rgb(${this.red},${this.green},${this.blue})`
+	}
+	colorConversion() {
+		return customcolorfunc(this.red,this.green,this.blue)
+	}
+}
+
+var colortable = []
+
+colorPresets = {
+	"Custom":"",
+	"Default":`colortable = [] // reset the colortable
+customcolorfunc = function(r,g,b) {return "rgb("+r+","+g+","+b+")"};
+for(let i = 0; i < colors*4; i+=4) {
+	colortable.push(new Color(rawcolors[i+2],rawcolors[i+1],rawcolors[i]))
+}
+redrawBMP()
+`,
+	"Reverse Color":`colortable = [] // reset the colortable
+for(let i = 0; i < colors*4; i+=4) {
+	colortable.push(new Color(rawcolors[i],rawcolors[i+1],rawcolors[i+2]))
+}
+redrawBMP()
+`,
+	"Photo Negative":`colortable = [] // reset the colortable
+l = 255;
+for(let i = 0; i < colors*4; i+=4) {
+	colortable.push(new Color(l-rawcolors[i+2],l-rawcolors[i+1],l-rawcolors[i]))
+}
+redrawBMP()
+
+`,
+	"Bad Hex":`
+customcolorfunc = function(r,g,b) {
+		return "#"+(r.toString('16') + g.toString('16') + b.toString('16'))
+	}
+colortable = [] // reset the colortable
+for(let i = 0; i < colors*4; i+=4) {
+	colortable.push(new Color(rawcolors[i+2],rawcolors[i+1],rawcolors[i]))
+}
+redrawBMP()
+`,
+	"18 bit color":`colortable = [] // reset the colortable
+for(let i = 0; i < colors*4; i+=4) {
+	colortable.push(new Color((rawcolors[i+2] << 2) & 255,(rawcolors[i+1] << 2) & 255,(rawcolors[i] << 2) & 255))
+}
+redrawBMP()
+`,
+	"Use Custom Redraw":`colortable = [] // reset the colortable
+customcolorfunc = function(r,g,b) {return "rgb("+r+","+g+","+b+")"};
+for(let i = 0; i < colors*4; i+=4) {
+	colortable.push(new Color(rawcolors[i+2],rawcolors[i+1],rawcolors[i]))
+}
+drawCustom()
+`,
+"Two Tone": `colortable = [] // reset the colortable
+window.colortable2 = [] /* any variables you want to have used in the next function need to be declared in window, like colortable2, thanks! */
+for(let i = 0; i < colors*4; i+=4) {
+	colortable.push(new Color(rawcolors[i+2],rawcolors[i+1],rawcolors[i]))
+		colortable2.push(new Color(rawcolors[i],rawcolors[i+1],rawcolors[i+2]))
+}
+drawCustom()
+// best used with draw function: two tone splice
+`,
+"WIREMOD | Single Cell RGB": `
+colortable = [] // reset the colortable
+customcolorfunc = function(r,g,b) {
+let mcolor = r
+mcolor <<= 8
+mcolor |= g
+mcolor <<= 8
+mcolor |= b
+return mcolor
+
+};
+for(let i = 0; i < colors*4; i+=4) {
+	colortable.push(new Color(rawcolors[i+2],rawcolors[i+1],rawcolors[i]))
+}
+drawCustom()
+`
+}
+
+pixelPresets = {
+	"Custom":"",
+	"Default":`c2D.clearRect(0,0,width,height); // clear area
+for(let y = height; y !== 0; y--) {
+	for(let x = 0; x < width; x++) {
+		c2D.fillStyle = colortable[pixels[x+(width*(height-y))]].colorConversion();
+		c2D.fillRect(x,y,1,1);
+	}
+}`,
+	"Gridded Transparency":`c2D.clearRect(0,0,width,height); // clear area
+for(let y = height; y !== 0; y-=2) {
+	for(let x = 0; x < width; x+=2) {
+		c2D.fillStyle = colortable[pixels[x+(width*(height-y))]].colorConversion();
+		c2D.fillRect(x,y,1,1);
+	}
+}`,
+	"Draw Sideways": `c2D.clearRect(0,0,width,height); // clear area
+for(let y = height; y !== 0; y--) {
+	for(let x = 0; x < width; x++) {
+		c2D.fillStyle = colortable[pixels[x+(width*(height-y))]].colorConversion();
+		c2D.fillRect(y,x,1,1);
+	}
+}`,
+	"Two Tone Splice": `c2D.clearRect(0,0,width,height); // clear area
+for(let y = height; y !== 0; y--) {
+	for(let x = 0; x < width; x++) {
+		if((x & 1) !== 0 ) {
+			c2D.fillStyle = colortable[pixels[x+(width*(height-y))]].colorConversion();
+			c2D.fillRect(x/1.1,y,1,1);
+		} else {
+			c2D.fillStyle = colortable2[pixels[x+(width*(height-y))]].colorConversion();
+			c2D.fillRect(x,y/1.1,1,1); 
+		}
+	}
+}`,
+	"Two Tone Color Banding": `c2D.clearRect(0,0,width,height); // clear area
+for(let y = height; y !== 0; y--) {
+	for(let x = 0; x < width; x++) {
+		if((x & 1) !== 0 ) {
+			c2D.fillStyle = colortable[pixels[x+(width*(height-y))]].colorConversion();
+			c2D.fillRect(x,y,1,1);
+		} else {
+			c2D.fillStyle = colortable2[pixels[x]].colorConversion();
+			// change x to y for vertical colorbanding
+			c2D.fillRect(x,y,1,1); 
+		}
+	}
+}`,
+	"Dump Color Palette":`c2D.clearRect(0,0,width,height); // clear area
+
+x = 0;
+y = 0;
+xmod = width/32;
+ymod = height/32;
+for(let i = 0; i < colortable.length; i++) {
+	if(x+xmod > width) {
+	x = 0;
+	y+=ymod
+	}
+	c2D.fillStyle = colortable[i].colorConversion();
+	c2D.fillRect(x,y,xmod,ymod);
+ x+=xmod
+}`,
+"WIREMOD | Convert to Single Cell 24Bit RGB string": `c2D.clearRect(0,0,width,height); // clear area
+let dptr = 0
+let skip = ((width)*(height-1))%4
+let convertedpixels = []
+for(let y = height-1; y !== -1; y--) {
+		convertedpixels[y] = []
+	for(let x = 0; x < width; x++) {
+				convertedpixels[y][x] = colortable[pixels[dptr++]].colorConversion();
+		//c2D.fillStyle = colortable[pixels[dptr++]].colorConversion();
+		//c2D.fillRect(x,y,1,1);
+	}
+		dptr += skip
+}
+
+final = "DB "
+for(let y = 0; y < height-1; y++) {
+for(let x = 0; x < width; x++) {
+final += convertedpixels[y][x]+','
+}
+}
+
+saveStringAsFile(final.slice(0,-1),bmpname)`
+}
+colorpresetkeys = Object.keys(colorPresets);
+for(let i = 0; i < Object.keys(colorPresets).length; i++) {
+	colorreadpresets.innerHTML += `<option value='${colorpresetkeys[i]}'>${colorpresetkeys[i]}</option>`
+}
+pixelpresetkeys = Object.keys(pixelPresets);
+for(let i = 0; i < Object.keys(pixelPresets).length; i++) {
+	pixelreadpresets.innerHTML += `<option value='${pixelpresetkeys[i]}'>${pixelpresetkeys[i]}</option>`
+}
+
+lastcolorpreset = "Custom";
+lastpixelpreset = "Custom";
+
+function changeColorPreset () {
+	if(lastcolorpreset === "Custom") {
+		colorPresets['Custom'] = colorread.value
+	}
+	colorread.value = colorPresets[colorreadpresets.value]
+	lastcolorpreset = colorreadpresets.value
+}
+function changePixelPreset () {
+	if(lastpixelpreset === "Custom") {
+		pixelPresets['Custom'] = pixelread.value
+	}
+	pixelread.value = pixelPresets[pixelreadpresets.value]
+	lastpixelpreset = pixelreadpresets.value
+}
+
+colorreadpresets.onchange = changeColorPreset;
+pixelreadpresets.onchange = changePixelPreset;
+
+width = 0;
+height = 0;
+colors = 0;
+rawcolors = []
+pixels = []
+bmpname = ""
+let reader
+async function loadBMPFull() {
+	bmpname = fileinp.files[0].name.match(/^.*?([^\\/.]*)[^\\/]*$/)[1]
+	reader = await fileinp.files[0].stream().getReader()
+	chunk = await reader.read()
+	width = readUint32BE(chunk.value.slice(18,22))
+	height = readUint32BE(chunk.value.slice(22,26))
+	colors = readUint32BE(chunk.value.slice(46,50))
+	rawcolors = chunk.value.slice(54,54+(colors*4))
+	colortable = []
+	for(let i = 0; i < colors*4; i+=4) {
+		colortable.push(new Color(rawcolors[i+2],rawcolors[i+1],rawcolors[i]))
+	}
+	pixels = Array.from(chunk.value.slice(54+(colors*4)))
+	mycanv.width = width;
+	mycanv.height = height;
+	if(pixels.length < width*height) {
+		while(!chunk.done) {
+			chunk = await reader.read()
+			if(chunk.value !== undefined) {
+				pixels = pixels.concat(Array.from(chunk.value))
+			}
+		}
+	}
+	redrawBMP();
+}
+
+function getColorsCustom() {
+	try {eval(colorread.value)} catch(err) {
+		console.log(err);
+	}
+}
+
+function drawCustom() {
+	try{eval(pixelread.value)} catch(err) {
+		console.log(err)
+	}
+}
+
+function redrawBMP() {
+	c2D.clearRect(0,0,width,height);
+	for(let y = height; y !== 0; y--) {
+		for(let x = 0; x < width; x++) {
+			c2D.fillStyle = colortable[pixels[x+(width*(height-y))]].colorConversion();
+			c2D.fillRect(x,y,1,1);
+		}
+	}
+}
+
+function saveStringAsFile(str,name) {
+	b = new Blob([str])
+	b.Type = "application/octet-stream; charset=utf-8"
+	download.href = URL.createObjectURL(b)
+	download.download = name+".txt"
+	download.click()
+}
+
+fileinp.onchange = loadBMPFull;
+reloadbmpcolored.onmouseup = getColorsCustom;
+reloadbmpcustom.onmouseup = drawCustom;
+</script>
